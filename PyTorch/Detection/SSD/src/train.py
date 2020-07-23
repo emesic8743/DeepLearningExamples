@@ -16,8 +16,59 @@ from torch.autograd import Variable
 import torch
 import time
 from SSD import _C as C
+from src.utils import Encoder, dboxes300_coco
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
+import torchvision
+import torchvision.transforms as Transforms
+import numpy as np
+import cv2
+import os
 
 from apex import amp
+
+def decode_results(predictions):
+    dboxes = dboxes300_coco()
+    encoder = Encoder(dboxes)
+    ploc, plabel = [val.float() for val in predictions]
+    results = encoder.decode_batch(ploc, plabel, criteria=0.5, max_output=20)
+
+    return results #[[ pred.detach().cpu().numpy() for pred in detections] for detections in results]
+
+def inference_loop(model, loss_func, optim, train_dataloader, encoder):
+    for nbatch, data in enumerate(train_dataloader):
+        img = data[0].cuda()
+        width = data[1]
+        height = data[2]
+        fn = data[3][0].split('.')[0]
+        model.eval()
+
+        predictions = model(img)
+        features = model.feature_extractor(img).cpu().detach()
+        path = os.path.join('/workspaces/DeepLearningExamples/PyTorch/Detection/SSD/kitti/features/', fn)
+        np.save(path, features)
+        
+
+        # results = decode_results(predictions)
+        # img1 = Transforms.ToPILImage()(data[0][0])
+        # print(img1)
+        # img1 = Transforms.Resize((int(height), int(width)))(img1)
+        # imgshow = np.array(img1)
+        # imgshow = imgshow[:, :, ::-1].copy()
+        # width = data[1][0]
+        # height = data[2][0]
+        
+        
+        # bboxes = results[0][0].cpu().detach().numpy()
+        # print(bboxes)
+        # for bbox in bboxes:
+        #     xmin = int(bbox[0] * width)
+        #     ymin = int(bbox[1] * height)
+        #     xmax = int(bbox[2] * width)
+        #     ymax = int(bbox[3] * height)
+        #     imgshow = cv2.rectangle(imgshow, (xmin, ymax), (xmax, ymin), (255, 0, 0))
+        # cv2.imwrite('/workspaces/DeepLearningExamples/PyTorch/Detection/SSD/test.png', imgshow)
+    return 1
 
 def train_loop(model, loss_func, epoch, optim, train_dataloader, val_dataloader, encoder, iteration, logger, args, mean, std):
 #     for nbatch, (img, _, img_size, bbox, label) in enumerate(train_dataloader):

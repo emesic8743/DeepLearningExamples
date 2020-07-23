@@ -162,6 +162,7 @@ class Encoder(object):
         bboxes, probs = self.scale_back_batch(bboxes_in, scores_in)
 
         output = []
+        
         for bbox, prob in zip(bboxes.split(1, 0), probs.split(1, 0)):
             bbox = bbox.squeeze(0)
             prob = prob.squeeze(0)
@@ -171,7 +172,6 @@ class Encoder(object):
     # perform non-maximum suppression
     def decode_single(self, bboxes_in, scores_in, criteria, max_output, max_num=200):
         # Reference to https://github.com/amdegroot/ssd.pytorch
-
         bboxes_out = []
         scores_out = []
         labels_out = []
@@ -183,13 +183,15 @@ class Encoder(object):
             # print(i)
 
             score = score.squeeze(1)
+
+            #UNCOMMENT FOR ORIGINAL
             mask = score > 0.05
 
             bboxes, score = bboxes_in[mask, :], score[mask]
             if score.size(0) == 0: continue
 
             score_sorted, score_idx_sorted = score.sort(dim=0)
-
+            
             # select max_output indices
             score_idx_sorted = score_idx_sorted[-max_num:]
             candidates = []
@@ -203,19 +205,17 @@ class Encoder(object):
                 # we only need iou < criteria
                 score_idx_sorted = score_idx_sorted[iou_sorted < criteria]
                 candidates.append(idx)
-
             bboxes_out.append(bboxes[candidates, :])
             scores_out.append(score[candidates])
             labels_out.extend([i]*len(candidates))
 
         if not bboxes_out:
             return [torch.tensor([]) for _ in range(3)]
+        
 
         bboxes_out, labels_out, scores_out = torch.cat(bboxes_out, dim=0), \
                torch.tensor(labels_out, dtype=torch.long), \
                torch.cat(scores_out, dim=0)
-
-
         _, max_ids = scores_out.sort(dim=0)
         max_ids = max_ids[-max_output:]
         return bboxes_out[max_ids, :], labels_out[max_ids], scores_out[max_ids]
@@ -553,6 +553,35 @@ class COCODetection(data.Dataset):
             pass
 
         return img, img_id, (htot, wtot), bbox_sizes, bbox_labels
+
+class Kitti(data.Dataset):
+    def __init__(self, img_folder, transform=None):
+        self.img_folder = img_folder
+
+        # Start processing annotation
+        self.images = os.listdir(self.img_folder)
+        start_time = time.time()
+        self.transform = transform
+
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        img_data = self.images[idx]
+        fn = str(img_data)
+        img_path = os.path.join(self.img_folder, fn)
+        img = Image.open(img_path)
+
+        width, height = img.size
+
+
+        if self.transform != None:
+            img = self.transform(img)
+        else:
+            pass
+
+        return img, width, height, fn
 
 
 def draw_patches(img, bboxes, labels, order="xywh", label_map={}):
